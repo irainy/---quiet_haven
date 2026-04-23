@@ -4,9 +4,9 @@
             "username": "18538256107",
             "password": "daf7140818",
             "orgId": "202334150503",
-            "time": ["21:00","22:00"],
-            "roomid": "13476",
-            "seatid": ["111"],
+            "time": ["09:00","22:30"],
+            "roomid": "13472",
+            "seatid": ["534"],
             "daysofweek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         }
     ]
