@@ -107,7 +107,7 @@ def debug(users, action=False):
         usernames, passwords = get_user_credentials(action)
     current_dayofweek = get_current_dayofweek(action)
     for index, user in enumerate(users):
-        username, password, times, roomid, seatid, daysofweek = user.values()
+        username, password, orgId, times, roomid, seatid, daysofweek = user.values()
         if type(seatid) == str:
             seatid = [seatid]
         if action:
