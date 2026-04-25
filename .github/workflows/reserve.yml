@@ -6,7 +6,7 @@ name: auto_Reserve
 # or API.
 on:
   schedule:
-    - cron: "57 11 * * *"  # 每天 19:57 抢座
+    - cron: "57 12 * * *"  # 每天 19:57 抢座
   workflow_dispatch:
 permissions:
   contents: write
