@@ -5,8 +5,8 @@ name: auto_Reserve
 # Controls when the action will run. Workflow runs when manually triggered using the UI
 # or API.
 on:
-  schedule:
-    - cron: "57 11 * * *"
+  #schedule:
+   # - cron: "57 11 * * *"
   workflow_dispatch:
 permissions:
   contents: write
