@@ -6,8 +6,7 @@
             "orgId": "202334150503",
             "time": ["09:00","22:30"],
             "roomid": "13472",
-            "seatid": ["511"],
-            "seatid": ["511", "518", "530", "522"],
+            "seatid": ["518", "511", "530", "522"],
             "daysofweek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         }
     ]
