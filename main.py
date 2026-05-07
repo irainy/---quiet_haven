@@ -31,111 +31,20 @@ MAX_ATTEMPT = 150  # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
 
 
-def login_and_reserve(users, usernames, passwords, action, success_list=None):
-    logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
-    )
-    if action and len(usernames.split(",")) != len(users):
-        raise Exception("user number should match the number of config")
-    if success_list is None:
-        success_list = [False] * len(users)
-    current_dayofweek = get_current_dayofweek(action)
-    for index, user in enumerate(users):
-        username, password, times, roomid, seatid, daysofweek = user.values()
-        if action:
-            username, password = (
-                usernames.split(",")[index],
-                passwords.split(",")[index],
-            )
-        if current_dayofweek not in daysofweek:
-            logging.info("Today not set to reserve")
-            continue
-        if not success_list[index]:
-            logging.info(
-                f"----------- {username} -- {times} -- {seatid} try -----------"
-            )
-            s = reserve(
-                sleep_time=SLEEPTIME,
-                max_attempt=MAX_ATTEMPT,
-                enable_slider=ENABLE_SLIDER,
-                reserve_next_day=RESERVE_NEXT_DAY,
-            )
-            s.get_login_status()
-            s.login(username, password)
-            s.requests.headers.update({"Host": "office.chaoxing.com"})
-            suc = s.submit(times, roomid, seatid, action)
-            success_list[index] = suc
-    return success_list
-
-
 def main(users, action=False):
     current_time = get_current_time(action)
     logging.info(f"start time {current_time}, action {'on' if action else 'off'}")
     attempt_times = 0
-    usernames, passwords = None, None
+    username, password = None, None
     if action:
-        usernames, passwords = get_user_credentials(action)
-    success_list = None
+        username, password = get_user_credentials(action)
+    else:
+        username, password = users["username"], users["password"]
     current_dayofweek = get_current_dayofweek(action)
-    today_reservation_num = sum(
-        1 for d in users if current_dayofweek in d.get("daysofweek")
-    )
-    while current_time < ENDTIME:
-        attempt_times += 1
-        # try:
-        success_list = login_and_reserve(
-            users, usernames, passwords, action, success_list
-        )
-        # except Exception as e:
-        #     print(f"An error occurred: {e}")
-        print(
-            f"attempt time {attempt_times}, time now {current_time}, success list {success_list}"
-        )
-        current_time = get_current_time(action)
-        if sum(success_list) == today_reservation_num:
-            print(f"reserved successfully!")
-            return
-
-
-def debug(users, action=False):
-    logging.info(
-        f"Global settings: \nSLEEPTIME: {SLEEPTIME}\nENDTIME: {ENDTIME}\nENABLE_SLIDER: {ENABLE_SLIDER}\nRESERVE_NEXT_DAY: {RESERVE_NEXT_DAY}"
-    )
-    suc = False
-    logging.info(f" Debug Mode start! , action {'on' if action else 'off'}")
-    if action:
-        usernames, passwords = get_user_credentials(action)
-    current_dayofweek = get_current_dayofweek(action)
-    for index, user in enumerate(users):
-        username, password, orgId, times, roomid, seatid, daysofweek = user.values()
-        if type(seatid) == str:
-            seatid = [seatid]
-        if action:
-            username, password = (
-                usernames.split(",")[index],
-                passwords.split(",")[index],
-            )
-        if current_dayofweek not in daysofweek:
-            logging.info("Today not set to reserve")
-            continue
-        logging.info(f"----------- {username} -- {times} -- {seatid} try -----------")
-        s = reserve(
-            sleep_time=SLEEPTIME,
-            max_attempt=MAX_ATTEMPT,
-            enable_slider=ENABLE_SLIDER,
-            reserve_next_day=RESERVE_NEXT_DAY,
-        )
-        s.get_login_status()
-        s.login(username, password)
-        s.requests.headers.update({"Host": "office.chaoxing.com"})
-        suc = s.submit(times, roomid, seatid, action)
-        if suc:
-            return
-
-
-def get_roomid(args1, args2):
-    username = input("请输入用户名：")
-    password = input("请输入密码：")
+    if current_dayofweek not in users["daysofweek"]:
+        logging.info("Today not set to reserve")
+        return
+    success = False
     s = reserve(
         sleep_time=SLEEPTIME,
         max_attempt=MAX_ATTEMPT,
@@ -143,10 +52,22 @@ def get_roomid(args1, args2):
         reserve_next_day=RESERVE_NEXT_DAY,
     )
     s.get_login_status()
-    s.login(username=username, password=password)
+    s.login(username, password)
     s.requests.headers.update({"Host": "office.chaoxing.com"})
-    encode = input("请输入deptldEnc：")
-    s.roomid(encode)
+    _, _, times, roomid, seatid, _ = users.values()
+    if type(seatid) == str:
+        seatid = [seatid]
+    while current_time < ENDTIME:
+        attempt_times += 1
+        suc = s.submit(times, roomid, seatid, action)
+        print(f"attempt {attempt_times}, time {current_time}, success {suc}")
+        current_time = get_current_time(action)
+        if suc:
+            break
+    if suc:
+        print("reserved successfully!")
+    else:
+        print("out of reserve time.")
 
 
 if __name__ == "__main__":
@@ -167,7 +88,7 @@ if __name__ == "__main__":
         help="use --action to enable in github action",
     )
     args = parser.parse_args()
-    func_dict = {"reserve": main, "debug": debug, "room": get_roomid}
+    func_dict = {"reserve": main}
     with open(args.user, "r+") as data:
-        usersdata = json.load(data)["reserve"]
+        usersdata = json.load(data)["reserve"][0]
     func_dict[args.method](usersdata, args.action)
