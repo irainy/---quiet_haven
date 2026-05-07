@@ -54,7 +54,7 @@ def main(users, action=False):
     s.get_login_status()
     s.login(username, password)
     s.requests.headers.update({"Host": "office.chaoxing.com"})
-    _, _, times, roomid, seatid, _ = users.values()
+    _, _, _, times, roomid, seatid, _ = users.values()
     if type(seatid) == str:
         seatid = [seatid]
     while current_time < ENDTIME:
