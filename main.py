@@ -44,7 +44,6 @@ def main(users, action=False):
     if current_dayofweek not in users["daysofweek"]:
         logging.info("Today not set to reserve")
         return
-    success = False
     s = reserve(
         sleep_time=SLEEPTIME,
         max_attempt=MAX_ATTEMPT,
@@ -57,6 +56,7 @@ def main(users, action=False):
     _, _, _, times, roomid, seatid, _ = users.values()
     if type(seatid) == str:
         seatid = [seatid]
+    suc = False
     while current_time < ENDTIME:
         attempt_times += 1
         suc = s.submit(times, roomid, seatid, action)
