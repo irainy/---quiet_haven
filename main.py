@@ -3,7 +3,7 @@ import time
 import argparse
 import os
 import logging
-
+import random
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -23,12 +23,15 @@ get_current_dayofweek = lambda action: (
 )
 
 
-SLEEPTIME = 3  # 每次抢座的间隔
+SLEEPTIME = 3  # 基础间隔（备用，新逻辑里用下面两个随机值）
 ENDTIME = "20:01:00"  # 根据学校的预约座位时间+1min即可
 
 ENABLE_SLIDER = True  # 是否有滑块验证
 MAX_ATTEMPT = 60  # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
+
+MIN_SLEEP = 0.9  # 最小随机间隔（秒）
+MAX_SLEEP = 1.8  # 最大随机间隔（秒）
 
 
 def main(users, action=False):
