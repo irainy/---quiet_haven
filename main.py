@@ -62,6 +62,8 @@ def main(users, action=False):
     suc = False
     while current_time < ENDTIME:
         attempt_times += 1
+        sleep_time = random.uniform(MIN_SLEEP, MAX_SLEEP)
+        time.sleep(sleep_time)
         suc = s.submit(times, roomid, seatid, action)
         print(f"attempt {attempt_times}, time {current_time}, success {suc}")
         current_time = get_current_time(action)
