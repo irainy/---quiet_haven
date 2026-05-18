@@ -30,8 +30,8 @@ ENABLE_SLIDER = True  # 是否有滑块验证
 MAX_ATTEMPT = 60  # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
 
-MIN_SLEEP = 0.9  # 最小随机间隔（秒）
-MAX_SLEEP = 1.8  # 最大随机间隔（秒）
+MIN_SLEEP = 0.5  # 最小随机间隔（秒）
+MAX_SLEEP = 1.0  # 最大随机间隔（秒）
 
 
 def main(users, action=False):
