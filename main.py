@@ -30,8 +30,8 @@ ENABLE_SLIDER = True  # 是否有滑块验证
 MAX_ATTEMPT = 60  # 最大尝试次数
 RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
 
-MIN_SLEEP = 0.5  # 最小随机间隔（秒）
-MAX_SLEEP = 1.0  # 最大随机间隔（秒）
+MIN_SLEEP = 0.2  # 最小随机间隔（秒）
+MAX_SLEEP = 0.5  # 最大随机间隔（秒）
 
 
 def main(users, action=False):
@@ -61,18 +61,34 @@ def main(users, action=False):
         seatid = [seatid]
     suc = False
     while current_time < ENDTIME:
+            suc = False
+    seat_index = 0
+    fast_switch = False
+    while current_time < ENDTIME:
         attempt_times += 1
-        sleep_time = random.uniform(MIN_SLEEP, MAX_SLEEP)
+        
+        # 如果是快速切换，等待 0.1~0.3 秒；否则正常随机等待
+        if fast_switch:
+            sleep_time = random.uniform(0.1, 0.3)
+            fast_switch = False
+        else:
+            sleep_time = random.uniform(MIN_SLEEP, MAX_SLEEP)
         time.sleep(sleep_time)
-        suc = s.submit(times, roomid, seatid, action)
-        print(f"attempt {attempt_times}, time {current_time}, success {suc}")
-        current_time = get_current_time(action)
+        
+        current_seat = seatid[seat_index]
+        suc = s.submit(times, roomid, [current_seat], action)
+        print(f"attempt {attempt_times}, time {current_time}, seat {current_seat}, success {suc}")
+        
         if suc:
             break
-    if suc:
-        print("reserved successfully!")
-    else:
-        print("out of reserve time.")
+        else:
+            # 如果座位被占，切换到下一个
+            if seat_index < len(seatid) - 1:
+                seat_index += 1
+                fast_switch = True  # 下次循环快速切换
+            else:
+                seat_index = 0  # 所有座位都试完，回到第一个继续
+            current_time = get_current_time(action)
 
 
 if __name__ == "__main__":
