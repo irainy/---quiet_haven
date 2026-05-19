@@ -4,6 +4,7 @@ import argparse
 import os
 import logging
 import random
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -23,15 +24,16 @@ get_current_dayofweek = lambda action: (
 )
 
 
-SLEEPTIME = 3  # 基础间隔（备用，新逻辑里用下面两个随机值）
-ENDTIME = "20:01:00"  # 根据学校的预约座位时间+1min即可
+SLEEPTIME = 3
+ENDTIME = "20:01:00"
 
-ENABLE_SLIDER = True  # 是否有滑块验证
-MAX_ATTEMPT = 60  # 最大尝试次数
-RESERVE_NEXT_DAY = False  # 预约明天而不是今天的
+ENABLE_SLIDER = True
+MAX_ATTEMPT = 60
+RESERVE_NEXT_DAY = False
 
-MIN_SLEEP = 0.2  # 最小随机间隔（秒）
-MAX_SLEEP = 0.5  # 最大随机间隔（秒）
+MIN_SLEEP = 0.5
+MAX_SLEEP = 1.0
+SPRINT_TIME = "19:59:58"
 
 
 def main(users, action=False):
@@ -60,35 +62,38 @@ def main(users, action=False):
     if type(seatid) == str:
         seatid = [seatid]
     suc = False
-    while current_time < ENDTIME:
-            suc = False
     seat_index = 0
     fast_switch = False
     while current_time < ENDTIME:
         attempt_times += 1
-        
-        # 如果是快速切换，等待 0.1~0.3 秒；否则正常随机等待
+
         if fast_switch:
             sleep_time = random.uniform(0.1, 0.3)
             fast_switch = False
+        elif current_time >= SPRINT_TIME:
+            sleep_time = 0
         else:
             sleep_time = random.uniform(MIN_SLEEP, MAX_SLEEP)
         time.sleep(sleep_time)
-        
+
         current_seat = seatid[seat_index]
         suc = s.submit(times, roomid, [current_seat], action)
         print(f"attempt {attempt_times}, time {current_time}, seat {current_seat}, success {suc}")
-        
+
         if suc:
             break
         else:
-            # 如果座位被占，切换到下一个
             if seat_index < len(seatid) - 1:
                 seat_index += 1
-                fast_switch = True  # 下次循环快速切换
+                fast_switch = True
             else:
-                seat_index = 0  # 所有座位都试完，回到第一个继续
+                seat_index = 0
             current_time = get_current_time(action)
+
+    if suc:
+        print("reserved successfully!")
+    else:
+        print("out of reserve time.")
 
 
 if __name__ == "__main__":
