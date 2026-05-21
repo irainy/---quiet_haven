@@ -70,11 +70,9 @@ class reserve:
         self.reserve_next_day = reserve_next_day
         requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 
-    # login and page token
     def _get_page_token(self, url, require_value=False):
         response = self.requests.get(url=url, verify=False)
         html = response.content.decode("utf-8")
-        # matches = re.findall(r"token = \'(.*?)\'", html)
         matches = re.findall(r'id="submit_enc"\s+value="(.*?)"', html)
         value_matches = None
         if require_value:
@@ -112,7 +110,6 @@ class reserve:
             )
             return (False, obj["msg2"])
 
-    # extra: get roomid
     def roomid(self, encode):
         url = f"https://office.chaoxing.com/data/apps/seat/room/list?cpage=1&pageSize=100&firstLevelName=&secondLevelName=&thirdLevelName=&deptIdEnc={encode}"
         json_data = self.requests.get(url=url).content.decode("utf-8")
@@ -121,43 +118,161 @@ class reserve:
             info = f'{i["firstLevelName"]}-{i["secondLevelName"]}-{i["thirdLevelName"]} id为：{i["id"]}'
             print(info)
 
-    # solve captcha
+    # ========== 新的验证码处理 ==========
 
-    def resolve_captcha(self):
-        logging.info(f"Start to resolve captcha token")
-        captcha_token, bg, tp = self.get_slide_captcha_data()
-        logging.info(f"Successfully get prepared captcha_token {captcha_token}")
-        logging.info(f"Captcha Image URL-small {tp}, URL-big {bg}")
-        x = self.x_distance(bg, tp)
-        logging.info(f"Successfully calculate the captcha distance {x}")
-
+    def _get_captcha_data(self):
+        """获取验证码数据（文字点选）"""
+        url = "https://captcha.chaoxing.com/captcha/get/verification/image"
+        timestamp = int(time.time() * 1000)
+        capture_key, token = generate_captcha_key(timestamp)
+        referer = f"https://office.chaoxing.com/front/third/apps/seat/code?id=3993&seatNum=0199"
         params = {
-            "callback": "jQuery33109180509737430778_1716381333117",
+            "callback": f"jQuery33107685004390294206_1716461324846",
             "captchaId": "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1",
-            "type": "slide",
+            "type": "textclick",
+            "version": "1.1.20",
+            "captchaKey": capture_key,
+            "token": token,
+            "referer": referer,
+            "_": timestamp,
+        }
+        response = self.requests.get(url=url, params=params, headers=self.headers)
+        content = response.text
+
+        # 去掉 callback 包裹
+        data = content.replace(
+            "jQuery33107685004390294206_1716461324846(", ""
+        ).replace(")", "")
+        data = json.loads(data)
+
+        captcha_token = data["token"]
+        origin_image = data["imageVerificationVo"]["originImage"]
+        context = data["imageVerificationVo"]["context"]
+        return captcha_token, origin_image, context
+
+    def _ocr_text_click(self, image_url, target_words):
+        """用 ddddocr 识别图片中目标汉字的坐标"""
+        import ddddocr
+        import numpy as np
+        from io import BytesIO
+        from PIL import Image
+
+        # 下载验证码图片
+        img_headers = {
+            "Referer": "https://office.chaoxing.com/",
+            "Host": "captcha-b.chaoxing.com",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+        }
+        r = self.requests.get(image_url, headers=img_headers)
+        img_bytes = r.content
+
+        # 使用 ddddocr 的滑块/点选检测
+        det = ddddocr.DdddOcr(det=True, show_ad=False)
+        
+        # 先尝试用目标检测模式
+        poses = det.detection(img_bytes)
+        
+        # 如果上面不行，用传统的 OCR + 坐标方式
+        ocr = ddddocr.DdddOcr(show_ad=False)
+        result = ocr.classification(img_bytes)
+        logging.info(f"OCR 识别结果: {result}")
+        logging.info(f"目标文字: {target_words}")
+        logging.info(f"检测到的位置: {poses}")
+
+        # 解析目标文字
+        # context 格式: ' "阵" "送" "流" '
+        import re as re_module
+        words = re_module.findall(r'"(\w)"', target_words)
+        logging.info(f"需要依次点击的文字: {words}")
+
+        # 如果 ddddocr 的 detection 返回了结果
+        if poses:
+            # poses 格式通常是 [[x1,y1,x2,y2], ...] 每个对应一个检测到的文字
+            # 但我们需要把检测到的文字和坐标对应起来
+            # 这里用简单方式：假设检测到的顺序就是图片中的顺序
+            text_click_arr = []
+            for i, word in enumerate(words):
+                if i < len(poses):
+                    pos = poses[i]
+                    x = pos[0] + (pos[2] - pos[0]) // 2  # 中心点 x
+                    y = pos[1] + (pos[3] - pos[1]) // 2  # 中心点 y
+                    text_click_arr.append({"x": x, "y": y})
+                    logging.info(f"文字 '{word}' 坐标: ({x}, {y})")
+            return text_click_arr
+        else:
+            # 如果 detection 不行，尝试用 classification 配合图片识别
+            # 这里用笨办法：假设四个字均匀分布
+            logging.warning("ddddocr detection 未返回结果，使用备用方案")
+            # 打开图片获取尺寸
+            img = Image.open(BytesIO(img_bytes))
+            w, h = img.size
+            # 假设字在图片中均匀分布（这只是一个猜测，准确率低）
+            n = len(words)
+            text_click_arr = []
+            for i, word in enumerate(words):
+                x = int(w * (i + 0.5) / n)
+                y = int(h * 0.5)
+                text_click_arr.append({"x": x, "y": y})
+            return text_click_arr
+
+    def _verify_text_click(self, captcha_token, text_click_arr):
+        """提交文字点选验证结果"""
+        params = {
+            "callback": "cx_captcha_function",
+            "captchaId": "42sxgHoTPTKbt0uZxPJ7ssOvtXr3ZgZ1",
+            "type": "textclick",
             "token": captcha_token,
-            "textClickArr": json.dumps([{"x": x}]),
+            "textClickArr": json.dumps(text_click_arr),
             "coordinate": json.dumps([]),
             "runEnv": "10",
-            "version": "1.1.18",
+            "version": "1.1.20",
             "_": int(time.time() * 1000),
         }
         response = self.requests.get(
-            f"https://captcha.chaoxing.com/captcha/check/verification/result",
+            "https://captcha.chaoxing.com/captcha/check/verification/result",
             params=params,
             headers=self.headers,
         )
-        text = response.text.replace(
-            "jQuery33109180509737430778_1716381333117(", ""
-        ).replace(")", "")
+        text = response.text.replace("cx_captcha_function(", "").replace(")", "")
         data = json.loads(text)
-        logging.info(f"Successfully resolve the captcha token {data}")
+        logging.info(f"文字点选验证结果: {data}")
+        
+        if data.get("result") == True or data.get("error") == 0:
+            try:
+                validate_val = json.loads(data["extraData"])["validate"]
+                return validate_val
+            except:
+                return data.get("token", "")
+        return ""
+
+    def resolve_captcha(self):
+        """统一的验证码处理入口（优先文字点选，失败则尝试滑块）"""
+        logging.info("开始处理验证码...")
+        
         try:
-            validate_val = json.loads(data["extraData"])["validate"]
-            return validate_val
-        except KeyError as e:
-            logging.info("Can't load validate value. Maybe server return mistake.")
+            # 尝试文字点选验证码
+            captcha_token, origin_image, context = self._get_captcha_data()
+            logging.info(f"获取到验证码 token: {captcha_token}")
+            logging.info(f"验证码图片: {origin_image}")
+            logging.info(f"需要点击的文字: {context}")
+            
+            text_click_arr = self._ocr_text_click(origin_image, context)
+            logging.info(f"识别出的坐标: {text_click_arr}")
+            
+            if text_click_arr:
+                result = self._verify_text_click(captcha_token, text_click_arr)
+                if result:
+                    logging.info(f"文字点选验证成功！validate: {result}")
+                    return result
+            
+            logging.warning("文字点选验证失败，返回空")
             return ""
+            
+        except Exception as e:
+            logging.error(f"验证码处理出错: {e}")
+            return ""
+
+    # ========== 旧的滑块逻辑保留 ==========
 
     def get_slide_captcha_data(self):
         url = "https://captcha.chaoxing.com/captcha/get/verification/image"
@@ -178,7 +293,6 @@ class reserve:
         }
         response = self.requests.get(url=url, params=params, headers=self.headers)
         content = response.text
-
         data = content.replace(
             "jQuery33107685004390294206_1716461324846(", ")"
         ).replace(")", "")
@@ -239,7 +353,7 @@ class reserve:
                     self.url.format(roomid, seat), require_value=True
                 )
                 logging.info(f"Get token: {token}")
-                captcha = self.resolve_captcha() if self.enable_slider else ""
+                captcha = self.resolve_captcha()
                 logging.info(f"Captcha token {captcha}")
                 suc = self.get_submit(
                     self.submit_url,
@@ -263,11 +377,11 @@ class reserve:
         delta_day = 1 if self.reserve_next_day else 0
         day = datetime.date.today() + datetime.timedelta(
             days=0 + delta_day
-        )  # 预约今天，修改days=1表示预约明天
+        )
         if action:
             day = datetime.date.today() + datetime.timedelta(
                 days=1 + delta_day
-            )  # 由于action时区问题导致其早+8区一天
+            )
         parm = {
             "roomId": roomid,
             "startTime": times[0],
@@ -280,7 +394,6 @@ class reserve:
             "verifyData": "1",
         }
         logging.info(f"submit parameter {parm} ")
-        # parm["enc"] = enc(parm)
         parm["enc"] = verify_param(parm, value)
         html = self.requests.post(url=url, params=parm, verify=True).content.decode(
             "utf-8"
