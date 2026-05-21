@@ -145,7 +145,13 @@ class reserve:
         ).replace(")", "")
         data = json.loads(data)
 
-        captcha_token = data["token"]
+         # 调试：打印完整返回
+        logging.info(f"验证码接口完整返回: {json.dumps(data, ensure_ascii=False)}")
+
+        captcha_token = data.get("token", "")
+        if not captcha_token:
+           logging.error(f"返回中没有 token 字段！keys: {list(data.keys())}") 
+
         origin_image = data["imageVerificationVo"]["originImage"]
         context = data["imageVerificationVo"]["context"]
         return captcha_token, origin_image, context
