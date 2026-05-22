@@ -176,11 +176,12 @@ class reserve:
         return captcha_token, origin_image, context
 
     def _ocr_text_click(self, image_url, target_words):
-        """用 ddddocr 识别图片中目标汉字的坐标"""
-        import ddddocr
+        """用 PaddleOCR 识别图片中目标汉字的坐标"""
         import re as re_module
         from io import BytesIO
         from PIL import Image
+        from paddleocr import PaddleOCR
+        import numpy as np
 
         img_headers = {
             "Referer": "https://office.chaoxing.com/",
@@ -189,48 +190,56 @@ class reserve:
         }
         r = self.requests.get(image_url, headers=img_headers)
         img_bytes = r.content
-        img = Image.open(BytesIO(img_bytes))
+        
+        # 保存临时文件，PaddleOCR 需要文件路径或 numpy array
+        img_array = np.frombuffer(img_bytes, dtype=np.uint8)
+        import cv2
+        img_cv = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
+        # 目标文字列表
         words = re_module.findall(r'"(\w)"', target_words)
         logging.info(f"需要依次点击的文字: {words}")
 
-        det = ddddocr.DdddOcr(det=True, show_ad=False)
-        poses = det.detection(img_bytes)
-        logging.info(f"检测到的位置: {poses}")
-
-        if not poses:
-            logging.warning("ddddocr detection 未返回结果")
+        # 初始化 PaddleOCR (只执行一次，但为了简单每次调)
+        ocr = PaddleOCR(use_angle_cls=False, lang='ch', show_log=False)
+        
+        # 识别整张图
+        result = ocr.ocr(img_cv, cls=False)
+        
+        if not result or not result[0]:
+            logging.warning("PaddleOCR 未识别到任何文字")
             return []
 
-        ocr = ddddocr.DdddOcr(show_ad=False)
+        # 存储识别结果: [(x_center, y_center, text), ...]
         box_results = []
-
-        for i, pos in enumerate(poses):
-            x1, y1, x2, y2 = pos
-            cropped = img.crop((x1, y1, x2, y2))
-            buf = BytesIO()
-            cropped.save(buf, format="PNG")
-            cropped_bytes = buf.getvalue()
-            text = ocr.classification(cropped_bytes).strip()
-            x_center = x1 + (x2 - x1) // 2
-            y_center = y1 + (y2 - y1) // 2
+        for line in result[0]:
+            box = line[0]
+            text = line[1][0]
+            # box 是四个角的坐标 [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+            x_coords = [p[0] for p in box]
+            y_coords = [p[1] for p in box]
+            x_center = int(sum(x_coords) / 4)
+            y_center = int(sum(y_coords) / 4)
             box_results.append((x_center, y_center, text))
-            logging.info(f"框{i}: 位置({x1},{y1},{x2},{y2}), 识别文字='{text}'")
+            logging.info(f"识别文字='{text}', 坐标: ({x_center}, {y_center})")
 
+        # 按目标文字顺序匹配坐标
         text_click_arr = []
+        used_indices = set()
+        
         for target in words:
             found = False
             for i, (x, y, text) in enumerate(box_results):
-                if target in text or text in target:
+                if i in used_indices:
+                    continue
+                if target == text or target in text or text in target:
                     text_click_arr.append({"x": x, "y": y})
-                    logging.info(f"文字 '{target}' 匹配到框{i}, 坐标: ({x}, {y})")
+                    used_indices.add(i)
+                    logging.info(f"文字 '{target}' 匹配到 '{text}', 坐标: ({x}, {y})")
                     found = True
                     break
             if not found:
-                logging.warning(f"文字 '{target}' 未匹配到任何框！")
-                if len(text_click_arr) < len(box_results):
-                    unused = box_results[len(text_click_arr)]
-                    text_click_arr.append({"x": unused[0], "y": unused[1]})
+                logging.error(f"文字 '{target}' 未匹配到任何识别结果！")
 
         logging.info(f"最终坐标: {text_click_arr}")
         return text_click_arr
