@@ -204,7 +204,7 @@ class reserve:
         ocr = PaddleOCR(use_angle_cls=False, lang='ch')
         
         # 识别整张图
-        result = ocr.ocr(img_cv, cls=False)
+        result = ocr.ocr(img_cv)
         
         if not result or not result[0]:
             logging.warning("PaddleOCR 未识别到任何文字")
