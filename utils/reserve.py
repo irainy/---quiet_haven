@@ -1,5 +1,6 @@
 import os
 os.environ["FLAGS_use_onednn"] = "0"
+
 from utils import AES_Encrypt, enc, generate_captcha_key, verify_param
 import json
 import requests
@@ -178,12 +179,12 @@ class reserve:
         return captcha_token, origin_image, context
 
     def _ocr_text_click(self, image_url, target_words):
-        """用 PaddleOCR 识别图片中目标汉字的坐标"""
+        """用 EasyOCR 识别图片中目标汉字的坐标"""
         import re as re_module
         from io import BytesIO
-        from PIL import Image
-        from paddleocr import PaddleOCR
         import numpy as np
+        import cv2
+        import easyocr
 
         img_headers = {
             "Referer": "https://office.chaoxing.com/",
@@ -192,32 +193,21 @@ class reserve:
         }
         r = self.requests.get(image_url, headers=img_headers)
         img_bytes = r.content
-        
-        # 保存临时文件，PaddleOCR 需要文件路径或 numpy array
         img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-        import cv2
         img_cv = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
 
-        # 目标文字列表
         words = re_module.findall(r'"(\w)"', target_words)
         logging.info(f"需要依次点击的文字: {words}")
 
-        # 初始化 PaddleOCR (只执行一次，但为了简单每次调)
-        ocr = PaddleOCR(use_angle_cls=False, lang='ch')
-        
-        # 识别整张图
-        result = ocr.ocr(img_cv)
-        
-        if not result or not result[0]:
-            logging.warning("PaddleOCR 未识别到任何文字")
-            return []
+        # 初始化 EasyOCR（首次会下载模型）
+        reader = easyocr.Reader(['ch_sim'], gpu=False)
+        result = reader.readtext(img_cv)
 
-        # 存储识别结果: [(x_center, y_center, text), ...]
+        # result 格式: [([[x1,y1],[x2,y2],[x3,y3],[x4,y4]], '文字', 置信度), ...]
         box_results = []
-        for line in result[0]:
-            box = line[0]
-            text = line[1][0]
-            # box 是四个角的坐标 [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+        for detection in result:
+            box = detection[0]
+            text = detection[1]
             x_coords = [p[0] for p in box]
             y_coords = [p[1] for p in box]
             x_center = int(sum(x_coords) / 4)
@@ -228,7 +218,7 @@ class reserve:
         # 按目标文字顺序匹配坐标
         text_click_arr = []
         used_indices = set()
-        
+
         for target in words:
             found = False
             for i, (x, y, text) in enumerate(box_results):
