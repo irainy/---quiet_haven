@@ -184,7 +184,76 @@ class reserve:
 
         img_headers = {
             "Referer": "https://office.chaoxing.com/",
+            "Host": "    def _ocr_text_click(self, image_url, target_words):
+        """用 ddddocr 识别图片中目标汉字的坐标"""
+        import ddddocr
+        import re as re_module
+        from io import BytesIO
+        from PIL import Image
+
+        img_headers = {
+            "Referer": "https://office.chaoxing.com/",
             "Host": "captcha-b.chaoxing.com",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+        }
+        r = self.requests.get(image_url, headers=img_headers)
+        img_bytes = r.content
+        img = Image.open(BytesIO(img_bytes))
+
+        # 目标文字列表
+        words = re_module.findall(r'"(\w)"', target_words)
+        logging.info(f"需要依次点击的文字: {words}")
+
+        # 先用 detection 找到所有文字框
+        det = ddddocr.DdddOcr(det=True, show_ad=False)
+        poses = det.detection(img_bytes)
+        logging.info(f"检测到的位置: {poses}")
+
+        if not poses:
+            logging.warning("ddddocr detection 未返回结果")
+            return []
+
+        # 用 OCR 识别每个框里的文字
+        ocr = ddddocr.DdddOcr(show_ad=False)
+        
+        # 存储每个框的识别结果
+        box_results = []  # [(x_center, y_center, recognized_text), ...]
+        
+        for i, pos in enumerate(poses):
+            x1, y1, x2, y2 = pos
+            # 裁剪出这个框
+            cropped = img.crop((x1, y1, x2, y2))
+            # 保存到 bytes
+            buf = BytesIO()
+            cropped.save(buf, format="PNG")
+            cropped_bytes = buf.getvalue()
+            # 识别
+            text = ocr.classification(cropped_bytes).strip()
+            x_center = x1 + (x2 - x1) // 2
+            y_center = y1 + (y2 - y1) // 2
+            box_results.append((x_center, y_center, text))
+            logging.info(f"框{i}: 位置({x1},{y1},{x2},{y2}), 识别文字='{text}'")
+
+        # 按目标文字顺序匹配坐标
+        text_click_arr = []
+        for target in words:
+            found = False
+            for i, (x, y, text) in enumerate(box_results):
+                if target in text or text in target:
+                    text_click_arr.append({"x": x, "y": y})
+                    logging.info(f"文字 '{target}' 匹配到框{i}, 坐标: ({x}, {y})")
+                    found = True
+                    break
+            if not found:
+                # 没匹配到，用第一个未使用的框
+                logging.warning(f"文字 '{target}' 未匹配到任何框！")
+                if len(text_click_arr) < len(box_results):
+                    unused = box_results[len(text_click_arr)]
+                    text_click_arr.append({"x": unused[0], "y": unused[1]})
+                    logging.info(f"使用备用框: ({unused[0]}, {unused[1]})")
+
+        logging.info(f"最终坐标: {text_click_arr}")
+        return text_click_arr-b.chaoxing.com",
             "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
         }
         r = self.requests.get(image_url, headers=img_headers)
