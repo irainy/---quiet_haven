@@ -201,7 +201,7 @@ class reserve:
         logging.info(f"需要依次点击的文字: {words}")
 
         # 初始化 PaddleOCR (只执行一次，但为了简单每次调)
-        ocr = PaddleOCR(use_angle_cls=False, lang='ch', show_log=False)
+        ocr = PaddleOCR(use_angle_cls=False, lang='ch')
         
         # 识别整张图
         result = ocr.ocr(img_cv, cls=False)
