@@ -7,20 +7,23 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout code
+        uses: actions/checkout@v2
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v2
         with:
           python-version: 3.11
 
-      - name: install dependency
+      # 这一项是你原本写在最上面的内容，现在把它放进 steps 里
+      - name: Install dependency
         run: |
           python -m pip install --upgrade pip
+          sudo apt-get update
           sudo apt-get install build-essential libssl-dev libffi-dev python3-dev -y
-          pip install cryptography requests opencv-python ddddocr pillow
+          pip install cryptography requests opencv-python ddddocr pillow paddlepaddle paddleocr
 
-      - name: run test script
+      - name: Run test script
         env:
           USERNAMES: ${{ secrets.USERNAMES }}
           PASSWORDS: ${{ secrets.PASSWORDS }}
