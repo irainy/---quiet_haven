@@ -1,3 +1,5 @@
+import os
+os.environ["FLAGS_use_onednn"] = "0"
 from utils import AES_Encrypt, enc, generate_captcha_key, verify_param
 import json
 import requests
